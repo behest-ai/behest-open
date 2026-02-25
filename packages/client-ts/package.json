@@ -1,0 +1,43 @@
+{
+  "name": "@behest/client-ts",
+  "version": "0.0.1",
+  "description": "Behest Client Library for TypeScript/Node.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest",
+    "lint": "eslint src/**"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/behest-ai/behest-open.git",
+    "directory": "packages/client-ts"
+  },
+  "homepage": "https://github.com/behest-ai/behest-open/tree/main/packages/client-ts#readme",
+  "bugs": {
+    "url": "https://github.com/behest-ai/behest-open/issues"
+  },
+  "keywords": [
+    "behest",
+    "openai",
+    "client",
+    "sdk"
+  ],
+  "author": "Behest",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "eslint": "^8.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
+  },
+  "dependencies": {
+    "openai": "^4.0.0"
+  },
+  "peerDependencies": {
+    "openai": "^4.0.0"
+  }
+}
