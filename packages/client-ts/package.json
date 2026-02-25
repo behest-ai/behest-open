@@ -1,10 +1,15 @@
 {
   "name": "@behest/client-ts",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Behest Client Library for TypeScript/Node.js",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest",
