@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Behest Chat Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: #0f0f12;
+      color: #e4e4e7;
+    }
+    .container { max-width: 560px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    .card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    input, button {
+      font-size: 1rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid #3f3f46;
+    }
+    input {
+      background: #27272a;
+      color: inherit;
+      width: 100%;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #2563eb; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .form-row input { flex: 1; }
+    .messages {
+      min-height: 200px;
+      max-height: 320px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+    }
+    .msg {
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .msg.user { background: #1e3a5f; margin-left: 1rem; }
+    .msg.assistant { background: #27272a; margin-right: 1rem; }
+    .msg .role { font-size: 0.75rem; opacity: 0.7; margin-bottom: 0.25rem; }
+    .hidden { display: none; }
+    .error { color: #f87171; font-size: 0.875rem; margin-top: 0.5rem; }
+    .hint { font-size: 0.8rem; opacity: 0.6; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Behest Chat Demo</h1>
+
+    <div id="login-section" class="card">
+      <p class="hint">Test users: alice/alice123, bob/bob123</p>
+      <div class="form-row">
+        <input id="username" placeholder="Username" autocomplete="username" />
+        <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+        <button id="login-btn">Log in</button>
+      </div>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+
+    <div id="chat-section" class="card hidden">
+      <p class="hint">Logged in as <strong id="user-name"></strong> — chat uses Behest via minted JWT</p>
+      <div class="messages" id="messages"></div>
+      <div class="form-row">
+        <input id="input" placeholder="Type a message..." />
+        <button id="send-btn">Send</button>
+      </div>
+      <p id="chat-error" class="error hidden"></p>
+      <button id="logout-btn" style="margin-top:1rem;background:#3f3f46">Log out</button>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
