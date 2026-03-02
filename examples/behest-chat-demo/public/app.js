@@ -13,6 +13,10 @@ const logoutBtn = document.getElementById("logout-btn");
 
 const API = ""; // same origin
 
+// Behest configuration and JWT token (obtained after login)
+let behestConfig = null;
+let behestToken = null;
+
 function hide(el) {
   el.classList.add("hidden");
 }
@@ -59,6 +63,7 @@ loginBtn.addEventListener("click", async () => {
   }
   loginBtn.disabled = true;
   try {
+    // Step 1: Authenticate user and create session
     const r = await fetch(`${API}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -70,6 +75,28 @@ loginBtn.addEventListener("click", async () => {
       showError(loginError, data.error || "Login failed");
       return;
     }
+
+    // Step 2: Get Behest configuration (base URL)
+    const configRes = await fetch(`${API}/api/config`);
+    if (!configRes.ok) {
+      showError(loginError, "Failed to get Behest config");
+      return;
+    }
+    behestConfig = await configRes.json();
+
+    // Step 3: Get Behest JWT token for this user
+    const tokenRes = await fetch(`${API}/api/get-token`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      showError(loginError, tokenData.error || "Failed to get Behest token");
+      return;
+    }
+    behestToken = tokenData.access_token;
+
+    // Switch to chat UI
     hide(loginSection);
     show(chatSection);
     userDisplay.textContent = data.user.username;
@@ -99,11 +126,25 @@ async function sendMessage() {
 
   sendBtn.disabled = true;
   try {
-    const r = await fetch(`${API}/api/chat`, {
+    // Direct call to Behest API using minted JWT
+    // The backend provides the token via /api/get-token
+    // and the base URL via /api/config
+    if (!behestToken || !behestConfig) {
+      showError(chatError, "Not authenticated with Behest");
+      return;
+    }
+
+    const r = await fetch(`${behestConfig.behest_base_url}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ messages }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${behestToken}`,
+      },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash",
+        messages,
+        max_tokens: 256,
+      }),
     });
     const data = await r.json();
     if (!r.ok) {
@@ -121,14 +162,35 @@ async function sendMessage() {
 
 logoutBtn.addEventListener("click", async () => {
   await fetch(`${API}/api/logout`, { method: "POST", credentials: "include" });
+  behestToken = null;
+  behestConfig = null;
   show(loginSection);
   hide(chatSection);
   usernameInput.value = "";
   passwordInput.value = "";
 });
 
-checkAuth().then((user) => {
+checkAuth().then(async (user) => {
   if (user) {
+    // Fetch config and token for already-authenticated users (e.g., page refresh)
+    try {
+      const configRes = await fetch(`${API}/api/config`);
+      if (configRes.ok) {
+        behestConfig = await configRes.json();
+      }
+      const tokenRes = await fetch(`${API}/api/get-token`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        behestToken = tokenData.access_token;
+      }
+    } catch (_) {
+      // If token fetch fails, user can still see chat UI but chat will fail
+      // This allows page reload to work even if token fetch temporarily fails
+    }
+
     hide(loginSection);
     show(chatSection);
     userDisplay.textContent = user.username;

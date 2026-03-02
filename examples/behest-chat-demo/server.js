@@ -29,7 +29,9 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-import "dotenv/config";
+import { config as dotenvConfig } from "dotenv";
+dotenvConfig({ path: ".env.local" });
+dotenvConfig(); // fallback to .env
 import express from "express";
 import cookieParser from "cookie-parser";
 import session from "express-session";
@@ -129,8 +131,9 @@ app.post("/api/login", (req, res) => {
  * Response: { ok: true }
  */
 app.post("/api/logout", (req, res) => {
-  req.session.destroy();
-  res.json({ ok: true });
+  req.session.destroy(() => {
+    res.json({ ok: true });
+  });
 });
 
 /**
@@ -157,33 +160,35 @@ app.get("/api/me", (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
- * POST /api/chat
- * Call Behest chat completions API
+ * GET /api/config
+ * Return public configuration needed by frontend
  *
- * This endpoint demonstrates the complete flow:
- * 1. Verify user is authenticated (middleware)
- * 2. Mint a Behest JWT using your API key
- * 3. Call Behest chat API with the minted JWT
- * 4. Return response to frontend
+ * Response: { behest_base_url: string }
+ * Note: BEHEST_API_KEY is intentionally NOT included
+ */
+app.get("/api/config", (req, res) => {
+  res.json({
+    behest_base_url: BEHEST_BASE,
+  });
+});
+
+/**
+ * POST /api/get-token
+ * Mint and return a Behest JWT for the authenticated user
  *
- * Request: {
- *   messages: [
- *     { role: "user", content: "Hello" },
- *     { role: "assistant", content: "Hi there!" }
- *   ],
- *   model?: "gemini-2.5-flash"  // optional, defaults to gemini-2.5-flash
- * }
+ * This enables the frontend to make direct calls to Behest API.
+ * The JWT is short-lived and user-specific.
  *
- * Response: Behest API response with assistant message
- * Error: 400 (bad request), 401 (not authenticated), 500 (Behest API error)
+ * Response: { access_token: string }
+ * Error: 401 (not authenticated), 500 (Behest API error)
  *
  * KEY SECURITY CONCEPT:
  * - BEHEST_API_KEY is kept server-side only (never exposed to frontend)
- * - Frontend sends messages to /api/chat
- * - Backend mints JWT and calls Behest on behalf of user
- * - This way, users never need to know about API keys
+ * - Backend mints JWT using the API key
+ * - Frontend receives JWT and calls Behest directly
+ * - JWT is scoped to the authenticated user
  */
-app.post("/api/chat", requireAuth, async (req, res) => {
+app.post("/api/get-token", requireAuth, async (req, res) => {
   // Validate API key is configured
   if (!BEHEST_API_KEY) {
     return res.status(500).json({
@@ -191,27 +196,18 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     });
   }
 
-  // Parse and validate request
-  const { messages, model } = req.body || {};
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: "messages array required" });
-  }
-
   try {
-    // ─── STEP 1: Mint Behest JWT ──────────────────────────────────────────
-    // Use your private API key to mint a JWT for this user
-    // This JWT will be used to call Behest APIs on behalf of the user
     console.log(`[Behest] Minting JWT for user: ${req.session.user.id}`);
 
     const mintRes = await fetch(`${BEHEST_BASE}/auth/v1/auth/mint`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${BEHEST_API_KEY}`,  // Your API key (server-side)
+        Authorization: `Bearer ${BEHEST_API_KEY}`,
       },
       body: JSON.stringify({
-        user_id: req.session.user.id,  // User ID from session
-        role: "regular",                 // User role (can be admin, regular, etc.)
+        user_id: req.session.user.id,
+        role: "regular",
       }),
     });
 
@@ -230,37 +226,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     }
 
     console.log(`[Behest] JWT minted successfully`);
-
-    // ─── STEP 2: Call Behest Chat API ─────────────────────────────────────
-    // Use the minted JWT to call Behest chat completions
-    console.log(`[Behest] Calling /v1/chat/completions with ${messages.length} messages`);
-
-    const chatRes = await fetch(`${BEHEST_BASE}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${access_token}`,  // Minted JWT (valid for this request)
-      },
-      body: JSON.stringify({
-        model: model || "gemini-2.5-flash",
-        messages,
-        max_tokens: 256,
-      }),
-    });
-
-    if (!chatRes.ok) {
-      const err = await chatRes.text();
-      console.error(`[Behest] Chat API failed: ${chatRes.status} - ${err}`);
-      return res.status(chatRes.status).json({
-        error: `Behest chat failed: ${err}`,
-      });
-    }
-
-    const chatJson = await chatRes.json();
-    console.log(`[Behest] Chat API response received`);
-
-    // ─── Return response to frontend ───────────────────────────────────────
-    res.json(chatJson);
+    res.json({ access_token });
   } catch (error) {
     console.error(`[Behest] Unexpected error:`, error);
     res.status(500).json({ error: "Internal server error" });
@@ -309,9 +275,10 @@ app.listen(PORT, () => {
   console.log("\n");
 
   console.log("🔗 API Endpoints:");
-  console.log("   POST   /api/login   — Authenticate user");
-  console.log("   POST   /api/logout  — End session");
-  console.log("   GET    /api/me      — Get current user");
-  console.log("   POST   /api/chat    — Call Behest chat (proxy)");
+  console.log("   POST   /api/login      — Authenticate user");
+  console.log("   POST   /api/logout     — End session");
+  console.log("   GET    /api/me         — Get current user");
+  console.log("   GET    /api/config     — Get Behest config (base URL)");
+  console.log("   POST   /api/get-token  — Mint Behest JWT for frontend use");
   console.log("\n");
 });
