@@ -1,6 +1,4 @@
 import type { ClientOptions } from 'openai';
-import type { RetryOptions } from './retry';
-import type { SigningKeyConfig } from './signing';
 
 /**
  * Supported Behest models
@@ -20,6 +18,9 @@ export type BehestModel =
 
 /**
  * Configuration options for BehestClient
+ *
+ * This is the base client options interface. For server-side usage with
+ * JWT signing capabilities, use {@link BehestServerClientOptions} from ./server.
  */
 export interface BehestClientOptions extends ClientOptions {
   /**
@@ -45,22 +46,4 @@ export interface BehestClientOptions extends ClientOptions {
    * Keep this server-side only in production.
    */
   apiKey?: string;
-
-  /**
-   * Tenant signing key for local JWT signing.
-   * When provided, mintToken() signs JWTs locally (~1ms) instead of making
-   * an HTTP call to /mint (50-200ms).
-   *
-   * Mutually exclusive with apiKey for auth purposes, but apiKey may still
-   * be set for backward compatibility with OpenAI SDK internals.
-   *
-   * The private key never leaves the process.
-   */
-  signingKey?: SigningKeyConfig;
 }
-
-/**
- * Configuration options for retry behavior
- * Exported from retry module but included here for convenience
- */
-export type { RetryOptions } from './retry';

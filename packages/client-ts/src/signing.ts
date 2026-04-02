@@ -49,11 +49,28 @@ export interface SignTokenResult {
 }
 
 /**
+ * Maximum number of cached signing keys.
+ * When exceeded, the oldest entries are evicted.
+ */
+const KEY_CACHE_MAX_SIZE = 16;
+
+/**
  * Module-level cache for parsed CryptoKey objects.
  * Avoids re-parsing the PEM on every sign call (~2-5ms savings).
  * Keyed by the PEM string itself (reference equality won't work across calls).
+ * Bounded to KEY_CACHE_MAX_SIZE entries; oldest entries are evicted when full.
  */
 const keyCache = new Map<string, CryptoKey>();
+
+/**
+ * Clear the signing key cache.
+ *
+ * Useful for testing or when rotating keys. After calling this,
+ * the next signBehestJWT call will re-import the PEM.
+ */
+export function clearSigningKeyCache(): void {
+  keyCache.clear();
+}
 
 /**
  * Import and cache a PEM private key for repeated signing.
@@ -69,6 +86,14 @@ export async function importSigningKey(pem: string): Promise<CryptoKey> {
 
   try {
     const key = await importPKCS8(pem, 'RS256');
+
+    // Evict oldest entries if cache is at capacity.
+    // Map iteration order is insertion order, so the first key is the oldest.
+    if (keyCache.size >= KEY_CACHE_MAX_SIZE) {
+      const oldestKey = keyCache.keys().next().value as string;
+      keyCache.delete(oldestKey);
+    }
+
     keyCache.set(pem, key as CryptoKey);
     return key as CryptoKey;
   } catch (err) {

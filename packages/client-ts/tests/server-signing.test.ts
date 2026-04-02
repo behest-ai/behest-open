@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { generateKeyPair, exportPKCS8, decodeJwt, decodeProtectedHeader } from 'jose';
 
 import { BehestServerClient } from '../src/server';
@@ -31,7 +31,6 @@ describe('BehestServerClient with signingKey', () => {
       expect(token.accessToken).toBeDefined();
       expect(typeof token.accessToken).toBe('string');
 
-      // Verify it is a locally-signed JWT with correct claims
       const payload = decodeJwt(token.accessToken);
       expect(payload.tid).toBe(makeSigningConfig().tenantId);
       expect(payload.pid).toBe(makeSigningConfig().projectId);
@@ -68,41 +67,17 @@ describe('BehestServerClient with signingKey', () => {
       const token = await client.mintToken('user-123', 'admin', 3600);
 
       const payload = decodeJwt(token.accessToken);
-      // Role should NOT be in the JWT — Kong forces role=user for sk_* tokens
       expect(payload).not.toHaveProperty('role');
     });
   });
 
-  describe('backward compatibility (no signingKey)', () => {
-    it('mintToken falls back to HTTP mint when no signingKey is configured', async () => {
-      // Mock global fetch to verify it tries HTTP mint
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          access_token: 'mock-jwt-from-mint',
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-        }),
-      });
-      vi.stubGlobal('fetch', mockFetch);
-
+  describe('no signingKey configured', () => {
+    it('mintToken throws when no signingKey is configured', async () => {
       const client = new BehestServerClient({
         apiKey: 'test-api-key',
-        // No signingKey — should use HTTP mint
       });
 
-      const token = await client.mintToken('user-123');
-
-      expect(token.accessToken).toBe('mock-jwt-from-mint');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-
-      // Verify the HTTP request was made to the mint endpoint
-      const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain('/auth/v1/auth/mint');
-      expect(options.method).toBe('POST');
-      expect(options.headers).toHaveProperty('Authorization', 'Bearer test-api-key');
-
-      vi.unstubAllGlobals();
+      await expect(client.mintToken('user-123')).rejects.toThrow(/No signingKey configured/);
     });
   });
 
@@ -115,10 +90,7 @@ describe('BehestServerClient with signingKey', () => {
 
       const token = await client.mintToken('user-123', 'regular', 3600);
 
-      // Token expires in 3600s, threshold is 300s by default — should not be expiring soon
       expect(client.isTokenExpiringSoon(token)).toBe(false);
-
-      // With a huge threshold, it should be expiring soon
       expect(client.isTokenExpiringSoon(token, 4000)).toBe(true);
     });
   });

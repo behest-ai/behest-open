@@ -2,25 +2,35 @@
  * Server-Side Behest Client
  *
  * Enhanced client for backend usage with integrated JWT minting capabilities.
- * Supports both HTTP-based minting (API key flow) and local JWT signing
- * (tenant signing key flow).
+ * Currently supports local JWT signing (tenant signing key flow).
+ *
+ * TODO: Add HTTP-based minting via BehestAuthClient when the auth module
+ * is implemented. This will enable the API key flow as a fallback path.
  */
 
 import { BehestClient } from './client';
-import { BehestAuthClient, type MintTokenOptions, type MintTokenResponse } from './auth';
-import { signBehestJWT, type SigningKeyConfig } from './signing';
+import { signBehestJWT, type SigningKeyConfig, type SignTokenResult } from './signing';
 import type { BehestClientOptions } from './types';
-import type { RetryOptions } from './retry';
+
+/**
+ * Response from minting a token.
+ *
+ * Matches the shape of SignTokenResult so local signing results
+ * can be returned directly.
+ */
+export interface MintTokenResponse {
+  /** The signed JWT string */
+  accessToken: string;
+  /** Expiration timestamp (Unix seconds) */
+  expiresAt: number;
+  /** Remaining lifetime in seconds */
+  expiresIn: number;
+}
 
 /**
  * Extended options for server client with auth configuration
  */
 export interface BehestServerClientOptions extends BehestClientOptions {
-  /**
-   * Optional retry configuration for API calls
-   */
-  retry?: RetryOptions;
-
   /**
    * Tenant signing key for local JWT signing.
    * When provided, mintToken() signs locally (~1ms) instead of making
@@ -46,18 +56,14 @@ export interface BehestServerClientOptions extends BehestClientOptions {
 /**
  * Server-side Behest client with integrated JWT minting
  *
- * This client combines the standard Behest API client with auth utilities
- * for minting JWTs, making it easy to mint tokens for users and call the API.
+ * This client combines the standard Behest API client with local JWT signing,
+ * making it easy to mint tokens for users and call the API without a round-trip.
  *
- * Supports two authentication flows:
- * 1. **API key flow** (default): Calls the /mint endpoint to exchange an API key for a JWT
- * 2. **Signing key flow**: Signs JWTs locally using a tenant RSA private key (~1ms, no network call)
+ * Currently supports:
+ * - **Signing key flow**: Signs JWTs locally using a tenant RSA private key (~1ms, no network call)
  *
- * @example
- * // API key flow (existing behavior)
- * const client = new BehestServerClient({
- *   apiKey: process.env.BEHEST_API_KEY,
- * });
+ * Future support (when auth module is added):
+ * - **API key flow**: Calls the /mint endpoint to exchange an API key for a JWT
  *
  * @example
  * // Signing key flow (local, no mint round-trip)
@@ -73,37 +79,22 @@ export interface BehestServerClientOptions extends BehestClientOptions {
  * const token = await client.mintToken('user-123');
  */
 export class BehestServerClient extends BehestClient {
-  /**
-   * Authentication utilities for minting tokens via HTTP
-   */
-  public auth: BehestAuthClient;
-
   private signingKeyConfig?: SigningKeyConfig;
-  private retryOptions?: RetryOptions;
 
   constructor(options: BehestServerClientOptions) {
-    const { retry, signingKey, ...rest } = options;
+    const { signingKey, ...rest } = options;
 
     super(rest);
 
     this.signingKeyConfig = signingKey;
-    this.retryOptions = retry;
-
-    // Initialize auth client with same API key and retry options
-    // Still available even when signing key is configured, in case
-    // the caller needs the HTTP mint flow for a specific use case
-    this.auth = new BehestAuthClient({
-      apiKey: rest.apiKey || process.env.BEHEST_API_KEY || '',
-      baseUrl: rest.baseURL || undefined,
-      retry,
-    });
   }
 
   /**
    * Mint a token for an end user.
    *
    * If `signingKey` was provided at construction, signs locally (~1ms).
-   * Otherwise, falls back to the HTTP mint endpoint (50-200ms).
+   * Otherwise, throws an error (HTTP mint will be available when the
+   * auth module is implemented).
    *
    * Note: When using signing keys, the `role` parameter is ignored.
    * Kong forces `role=user` for all `sk_*` tokens regardless of any
@@ -126,7 +117,13 @@ export class BehestServerClient extends BehestClient {
       // Kong forces role to "user" for all sk_* tokens.
       return signBehestJWT(this.signingKeyConfig, { userId, expiresIn });
     }
-    return this.auth.mint(userId, role, expiresIn);
+
+    // TODO: Fall back to HTTP mint via BehestAuthClient when auth module is added.
+    // For now, a signing key is required for server-side token minting.
+    throw new Error(
+      'No signingKey configured. BehestServerClient requires a signingKey for local JWT signing. ' +
+      'HTTP-based minting via API key will be available when the auth module is implemented.'
+    );
   }
 
   /**
@@ -137,6 +134,7 @@ export class BehestServerClient extends BehestClient {
    * @returns True if the token expires within the threshold
    */
   isTokenExpiringSoon(token: MintTokenResponse, thresholdSeconds: number = 300): boolean {
-    return this.auth.isExpiringSoon(token, thresholdSeconds);
+    const now = Math.floor(Date.now() / 1000);
+    return (token.expiresAt - now) < thresholdSeconds;
   }
 }
