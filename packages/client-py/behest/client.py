@@ -7,8 +7,10 @@ BehestSigningClient: Local JWT signing flow (extends openai.OpenAI).
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Optional
 
+import httpx
 import openai
 
 from behest.errors import BehestError, ValidationError
@@ -67,6 +69,7 @@ class BehestSigningClient(openai.OpenAI):
     """Behest AI client using local JWT signing with tenant signing keys.
 
     Signs JWTs locally (~1ms) instead of calling the mint endpoint (50-200ms).
+    Tokens are automatically refreshed when within 30 seconds of expiry.
 
     Usage::
 
@@ -89,6 +92,7 @@ class BehestSigningClient(openai.OpenAI):
     _project_id: str
     _default_user_id: str
     _token_ttl: int
+    _token_expires_at: float
     _custom_headers: dict[str, str]
 
     def __init__(
@@ -138,12 +142,39 @@ class BehestSigningClient(openai.OpenAI):
             user_id=self._default_user_id,
             expires_in=token_ttl,
         )
+        self._token_expires_at = time.time() + token_ttl
 
         super().__init__(
             api_key=initial_token["access_token"],
             base_url=resolved_base_url,
             **kwargs,
         )
+
+    def _refresh_token_if_needed(self) -> None:
+        """Auto-refresh the JWT when it is within 30 seconds of expiry."""
+        if time.time() >= self._token_expires_at - 30:
+            result = sign_behest_jwt(
+                private_key_pem=self._signing_key_pem,
+                key_id=self._key_id,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                user_id=self._default_user_id,
+                expires_in=self._token_ttl,
+            )
+            self.api_key = result["access_token"]
+            self._token_expires_at = time.time() + self._token_ttl
+
+    def _prepare_request(self, request: httpx.Request) -> None:
+        """Override httpx hook to auto-refresh token before each request.
+
+        The OpenAI SDK calls this after building the request (including
+        the Authorization header).  We refresh the token if needed and
+        patch the header so the outgoing request carries a valid JWT.
+        """
+        self._refresh_token_if_needed()
+        # The Authorization header was already set from the (possibly stale)
+        # api_key during _build_request.  Patch it with the current value.
+        request.headers["authorization"] = f"Bearer {self.api_key}"
 
     def sign_token(
         self,

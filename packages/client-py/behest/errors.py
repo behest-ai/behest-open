@@ -118,6 +118,8 @@ def parse_error_response(response: Any) -> BehestError:
         return AuthenticationError(message, code=code, request_id=request_id, response_body=body)
 
     if status == 429:
+        if code == "budget_exceeded":
+            return BudgetExceededError(message, request_id=request_id, response_body=body)
         retry_after = response.headers.get("retry-after")
         retry_ms = int(retry_after) * 1000 if retry_after else None
         return RateLimitError(
@@ -126,6 +128,11 @@ def parse_error_response(response: Any) -> BehestError:
             request_id=request_id,
             response_body=body,
         )
+
+    if status == 451:
+        if code == "content_blocked":
+            return ContentBlockedError(message, request_id=request_id, response_body=body)
+        return PIIBlockedError(message, request_id=request_id, response_body=body)
 
     if status == 400:
         return ValidationError(message, code=code, request_id=request_id, response_body=body)

@@ -1,7 +1,8 @@
 """Tests for behest.client — BehestClient and BehestSigningClient."""
 
 import os
-from unittest.mock import patch
+import time
+from unittest.mock import patch, MagicMock
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -282,3 +283,144 @@ class TestBehestSigningClient:
                 tenant_id="tid-001",
                 project_id="pid-001",
             )
+
+
+class TestBehestSigningClientAutoRefresh:
+    """H6: Token auto-refresh when within 30 seconds of expiry."""
+
+    def test_token_expires_at_set_on_init(self, rsa_keypair):
+        """_token_expires_at is set during construction."""
+        from behest.client import BehestSigningClient
+
+        before = time.time()
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+        after = time.time()
+        assert before + 300 <= client._token_expires_at <= after + 300
+
+    def test_no_refresh_when_token_is_fresh(self, rsa_keypair):
+        """Token is NOT refreshed when well within TTL."""
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+        original_token = client.api_key
+        client._refresh_token_if_needed()
+        # Token should NOT have changed (still fresh, >30s from expiry)
+        assert client.api_key == original_token
+
+    def test_refresh_when_token_near_expiry(self, rsa_keypair):
+        """Token IS refreshed when within 30 seconds of expiry."""
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+
+        # Simulate token about to expire (within 30s window)
+        client._token_expires_at = time.time() + 10
+        client._refresh_token_if_needed()
+
+        # Expiry should be reset to ~now + 300
+        assert client._token_expires_at > time.time() + 250
+        # api_key should be a valid JWT
+        assert client.api_key.count(".") == 2
+
+    def test_refresh_when_token_already_expired(self, rsa_keypair):
+        """Token IS refreshed when already past expiry."""
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+
+        # Simulate token already expired
+        client._token_expires_at = time.time() - 60
+        old_expires = client._token_expires_at
+        client._refresh_token_if_needed()
+
+        # Expiry should be reset to the future
+        assert client._token_expires_at > time.time() + 250
+        assert client._token_expires_at != old_expires
+
+    def test_prepare_request_refreshes_token_and_patches_header(self, rsa_keypair):
+        """_prepare_request refreshes expired token and updates Authorization header."""
+        import httpx
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+
+        # Simulate token about to expire
+        client._token_expires_at = time.time() + 5
+        old_expires = client._token_expires_at
+
+        # Create a mock httpx.Request
+        request = httpx.Request("GET", "https://api.behest.ai/v1/models")
+
+        client._prepare_request(request)
+
+        # Expiry should have been reset (token refreshed)
+        assert client._token_expires_at > old_expires
+        assert client._token_expires_at > time.time() + 250
+        # Authorization header should carry the current token
+        assert request.headers["authorization"] == f"Bearer {client.api_key}"
+
+    def test_prepare_request_patches_header_even_when_fresh(self, rsa_keypair):
+        """_prepare_request always patches the header with current api_key."""
+        import httpx
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+
+        request = httpx.Request("GET", "https://api.behest.ai/v1/models")
+        client._prepare_request(request)
+
+        assert request.headers["authorization"] == f"Bearer {client.api_key}"
+
+    def test_refresh_produces_valid_jwt(self, rsa_keypair):
+        """Refreshed token is a valid 3-part JWT."""
+        from behest.client import BehestSigningClient
+
+        client = BehestSigningClient(
+            signing_key_pem=rsa_keypair,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid-001",
+            project_id="pid-001",
+            token_ttl=300,
+        )
+
+        # Force refresh
+        client._token_expires_at = time.time() - 1
+        client._refresh_token_if_needed()
+
+        assert client.api_key.count(".") == 2

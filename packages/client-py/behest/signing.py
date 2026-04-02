@@ -68,7 +68,7 @@ def sign_behest_jwt(
         tenant_id: Tenant UUID that owns this signing key.
         project_id: Project UUID for this token.
         user_id: End-user identifier.
-        expires_in: Token lifetime in seconds. Default: 3600.
+        expires_in: Token lifetime in seconds (60--86400). Default: 3600.
 
     Returns:
         dict with keys: ``access_token`` (str), ``expires_at`` (int), ``expires_in`` (int).
@@ -76,6 +76,7 @@ def sign_behest_jwt(
     Raises:
         BehestError: If the key_id prefix is wrong or required fields are empty.
         BehestError: If the PEM is invalid.
+        ValueError: If expires_in is outside the 60--86400 range.
     """
     # Input validation
     if not key_id.startswith("sk_"):
@@ -86,6 +87,10 @@ def sign_behest_jwt(
         raise ValidationError("project_id is required")
     if not user_id:
         raise ValidationError("user_id is required")
+    if expires_in < 60 or expires_in > 86400:
+        raise ValueError(
+            f"expires_in must be between 60 and 86400 seconds, got {expires_in}"
+        )
 
     now = int(time.time())
     exp = now + expires_in

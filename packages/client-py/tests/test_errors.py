@@ -356,3 +356,159 @@ class TestParseErrorResponse:
         err = parse_error_response(resp)
         assert isinstance(err, BehestError)
         assert err.status == 403
+
+
+class TestParseErrorResponse451:
+    """H8: parse_error_response handles 451 status codes."""
+
+    def _make_response(self, status_code, json_body=None, text="", headers=None):
+        class MockResponse:
+            def __init__(self, sc, jb, t, h):
+                self.status_code = sc
+                self._json = jb
+                self._text = t
+                self.headers = h or {}
+                self.reason_phrase = "Error"
+
+            def json(self):
+                if self._json is None:
+                    raise ValueError("No JSON")
+                return self._json
+
+            @property
+            def text(self):
+                return self._text
+
+        return MockResponse(status_code, json_body, text, headers)
+
+    def test_451_default_returns_pii_blocked_error(self):
+        from behest.errors import PIIBlockedError, parse_error_response
+
+        resp = self._make_response(451, {"message": "PII detected in request"})
+        err = parse_error_response(resp)
+        assert isinstance(err, PIIBlockedError)
+        assert err.status == 451
+
+    def test_451_with_pii_blocked_code_returns_pii_blocked_error(self):
+        from behest.errors import PIIBlockedError, parse_error_response
+
+        resp = self._make_response(
+            451, {"message": "PII detected", "code": "pii_blocked"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, PIIBlockedError)
+
+    def test_451_with_content_blocked_code_returns_content_blocked_error(self):
+        from behest.errors import ContentBlockedError, parse_error_response
+
+        resp = self._make_response(
+            451, {"message": "Content blocked by guardrails", "code": "content_blocked"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, ContentBlockedError)
+        assert err.status == 451
+
+    def test_451_with_unknown_code_returns_pii_blocked_error(self):
+        """Unknown codes on 451 fall back to PIIBlockedError."""
+        from behest.errors import PIIBlockedError, parse_error_response
+
+        resp = self._make_response(
+            451, {"message": "Blocked", "code": "some_other_code"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, PIIBlockedError)
+
+    def test_451_preserves_request_id(self):
+        from behest.errors import parse_error_response
+
+        resp = self._make_response(
+            451,
+            {"message": "PII detected"},
+            headers={"x-request-id": "req-451"},
+        )
+        err = parse_error_response(resp)
+        assert err.request_id == "req-451"
+
+    def test_451_preserves_response_body(self):
+        from behest.errors import parse_error_response
+
+        body = {"message": "PII detected", "details": "ssn found"}
+        resp = self._make_response(451, body)
+        err = parse_error_response(resp)
+        assert err.response_body == body
+
+
+class TestParseErrorResponseBudgetExceeded:
+    """H8: parse_error_response handles budget_exceeded in 429 branch."""
+
+    def _make_response(self, status_code, json_body=None, text="", headers=None):
+        class MockResponse:
+            def __init__(self, sc, jb, t, h):
+                self.status_code = sc
+                self._json = jb
+                self._text = t
+                self.headers = h or {}
+                self.reason_phrase = "Error"
+
+            def json(self):
+                if self._json is None:
+                    raise ValueError("No JSON")
+                return self._json
+
+            @property
+            def text(self):
+                return self._text
+
+        return MockResponse(status_code, json_body, text, headers)
+
+    def test_429_budget_exceeded_returns_budget_exceeded_error(self):
+        from behest.errors import BudgetExceededError, parse_error_response
+
+        resp = self._make_response(
+            429, {"message": "Monthly budget exceeded", "code": "budget_exceeded"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, BudgetExceededError)
+        assert err.status == 429
+        assert err.code == "budget_exceeded"
+
+    def test_429_budget_exceeded_is_not_rate_limit_error(self):
+        from behest.errors import BudgetExceededError, RateLimitError, parse_error_response
+
+        resp = self._make_response(
+            429, {"message": "Budget exceeded", "code": "budget_exceeded"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, BudgetExceededError)
+        assert not isinstance(err, RateLimitError)
+
+    def test_429_without_budget_code_returns_rate_limit_error(self):
+        """Regular 429 without budget_exceeded code still returns RateLimitError."""
+        from behest.errors import RateLimitError, parse_error_response
+
+        resp = self._make_response(
+            429, {"message": "Too many requests", "code": "rate_limit_exceeded"}
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, RateLimitError)
+
+    def test_429_budget_exceeded_preserves_request_id(self):
+        from behest.errors import BudgetExceededError, parse_error_response
+
+        resp = self._make_response(
+            429,
+            {"message": "Budget exceeded", "code": "budget_exceeded"},
+            headers={"x-request-id": "req-budget"},
+        )
+        err = parse_error_response(resp)
+        assert isinstance(err, BudgetExceededError)
+        assert err.request_id == "req-budget"
+
+    def test_429_budget_exceeded_preserves_response_body(self):
+        from behest.errors import BudgetExceededError, parse_error_response
+
+        body = {"message": "Budget exceeded", "code": "budget_exceeded", "limit": 100}
+        resp = self._make_response(429, body)
+        err = parse_error_response(resp)
+        assert isinstance(err, BudgetExceededError)
+        assert err.response_body == body

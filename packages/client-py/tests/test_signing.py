@@ -329,3 +329,105 @@ class TestInputValidation:
             user_id="alice",
         )
         assert isinstance(result["access_token"], str)
+
+
+class TestTtlRangeValidation:
+    """H7: expires_in must be between 60 and 86400 seconds."""
+
+    def test_ttl_below_minimum_raises_value_error(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        with pytest.raises(ValueError, match="expires_in must be between 60 and 86400"):
+            sign_behest_jwt(
+                private_key_pem=private_pem,
+                key_id="sk_abc123def456789012345678abcdef01",
+                tenant_id="tid",
+                project_id="pid",
+                user_id="alice",
+                expires_in=30,
+            )
+
+    def test_ttl_of_zero_raises_value_error(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        with pytest.raises(ValueError, match="expires_in must be between 60 and 86400"):
+            sign_behest_jwt(
+                private_key_pem=private_pem,
+                key_id="sk_abc123def456789012345678abcdef01",
+                tenant_id="tid",
+                project_id="pid",
+                user_id="alice",
+                expires_in=0,
+            )
+
+    def test_ttl_above_maximum_raises_value_error(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        with pytest.raises(ValueError, match="expires_in must be between 60 and 86400"):
+            sign_behest_jwt(
+                private_key_pem=private_pem,
+                key_id="sk_abc123def456789012345678abcdef01",
+                tenant_id="tid",
+                project_id="pid",
+                user_id="alice",
+                expires_in=100000,
+            )
+
+    def test_ttl_at_minimum_boundary_succeeds(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        result = sign_behest_jwt(
+            private_key_pem=private_pem,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid",
+            project_id="pid",
+            user_id="alice",
+            expires_in=60,
+        )
+        assert result["expires_in"] == 60
+
+    def test_ttl_at_maximum_boundary_succeeds(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        result = sign_behest_jwt(
+            private_key_pem=private_pem,
+            key_id="sk_abc123def456789012345678abcdef01",
+            tenant_id="tid",
+            project_id="pid",
+            user_id="alice",
+            expires_in=86400,
+        )
+        assert result["expires_in"] == 86400
+
+    def test_negative_ttl_raises_value_error(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        with pytest.raises(ValueError, match="expires_in must be between 60 and 86400"):
+            sign_behest_jwt(
+                private_key_pem=private_pem,
+                key_id="sk_abc123def456789012345678abcdef01",
+                tenant_id="tid",
+                project_id="pid",
+                user_id="alice",
+                expires_in=-1,
+            )
+
+    def test_error_message_includes_actual_value(self, rsa_keypair):
+        from behest.signing import sign_behest_jwt
+
+        private_pem, _, _, _ = rsa_keypair
+        with pytest.raises(ValueError, match="got 10"):
+            sign_behest_jwt(
+                private_key_pem=private_pem,
+                key_id="sk_abc123def456789012345678abcdef01",
+                tenant_id="tid",
+                project_id="pid",
+                user_id="alice",
+                expires_in=10,
+            )
