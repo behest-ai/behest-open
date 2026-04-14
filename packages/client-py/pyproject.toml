@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behest"
-version = "0.1.0"
-description = "Behest AI Python SDK — extends OpenAI with Behest auth and local JWT signing"
+version = "0.3.0b1"
+description = "Behest AI Python SDK — dual-mode (API key or local sign), auth.mint, chat completions with streaming, threads, usage, typed errors."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
