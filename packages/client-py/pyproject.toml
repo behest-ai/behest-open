@@ -3,11 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "behest"
-version = "0.3.0b1"
-description = "Behest AI Python SDK — dual-mode (API key or local sign), auth.mint, chat completions with streaming, threads, usage, typed errors."
+name = "behest-ai"
+version = "1.5.0b1"
+description = "Behest AI Python SDK — dual-mode (API key or local sign), auth.mint, chat completions with streaming, threads, usage, typed errors. Install: `pip install behest-ai`; import: `from behest import Behest`."
 readme = "README.md"
-license = "MIT"
+license = { text = "MIT" }
+# Explicit empty list avoids hatchling auto-adding `License-File` to metadata,
+# which bumps Metadata-Version to 2.4 and gets rejected by older PyPI clients.
+# LICENSE file is still bundled in the wheel via hatch.build.targets.wheel.
+license-files = []
 requires-python = ">=3.10"
 authors = [{ name = "Behest", email = "sdk@behest.ai" }]
 keywords = ["behest", "openai", "ai", "inference", "sdk"]
