@@ -112,9 +112,71 @@ Every error exposes `.status`, `.code`, `.traceId` (matches the `X-Trace-Id` res
 
 ## Local-signing mode
 
-Prefix `BEHEST_KEY` with `behest_pk_` (or set a base64-encoded PKCS#8 PEM) and add `BEHEST_KID` / `BEHEST_TENANT_ID` / `BEHEST_PROJECT_ID`. The SDK detects the prefix automatically; **no code change**. You skip the HTTP round-trip for each mint.
+Sign JWTs locally with an RSA private key scoped to your tenant — **zero HTTP round-trips per mint**. Great for high-QPS backends, edge runtimes, or "no outbound secrets traffic" policies.
 
-Local signing is **server-side only**. The SDK throws `BehestConfigError` if you try to use it in a browser.
+### 1. Generate a signing key
+
+Dashboard → **Settings → Signing Keys → Generate**. You'll get two things **shown only once**:
+
+- A PKCS#8 PEM private key — keep this server-side only.
+- A `kid` (key id) — a short string like `kid_7h4m2p`. Public by design.
+
+The public half is automatically added to your tenant's JWKS at `https://<slug>.behest.app/.well-known/jwks.json`; Kong picks it up within a few minutes and starts accepting JWTs signed with the matching `kid`.
+
+### 2. Encode + set env vars
+
+```bash
+# Base64-encode the PEM (one line, trim trailing newline)
+PEM_B64=$(base64 < ./tenant-private-key.pem | tr -d '\n')
+
+# Put the behest_pk_ prefix in front so the SDK auto-detects sign mode
+echo "BEHEST_KEY=behest_pk_${PEM_B64}"                    >> .env
+echo "BEHEST_BASE_URL=https://amber-fox-042.behest.app"   >> .env
+echo "BEHEST_KID=kid_7h4m2p"                              >> .env
+echo "BEHEST_TENANT_ID=tnt_..."                           >> .env
+echo "BEHEST_PROJECT_ID=proj_..."                         >> .env
+```
+
+Alternative: skip the `behest_pk_` prefix and paste the base64 PEM directly — the SDK detects PKCS#8 PEM bytes as a fallback.
+
+### 3. Use it — no code change
+
+```ts
+import { Behest } from "@behest/client-ts";
+
+const behest = new Behest();  // SDK sees behest_pk_ prefix → sign mode
+
+// Exact same API surface. No HTTP call — signs locally with jose.
+const { token, sessionId } = await behest.auth.mint({ user_id: "u_42" });
+
+await behest.chat.completions.create({
+  messages: [{ role: "user", content: "Hi!" }],
+  user_id: "u_42",
+});
+```
+
+### Advanced: pass the key programmatically
+
+If you don't want the key in env (e.g., fetched from a secrets manager at startup):
+
+```ts
+const pemFromSecretsManager = await fetchFromVault("tenant-jwt-key");
+const behest = new Behest({
+  key: pemFromSecretsManager,   // raw PEM string; no prefix needed
+  baseUrl: "https://amber-fox-042.behest.app",
+  kid: "kid_7h4m2p",
+  tenantId: "tnt_...",
+  projectId: "proj_...",
+});
+```
+
+### Rotation
+
+Generate a new key → deploy with the new `BEHEST_KID` + `BEHEST_KEY` → revoke the old `kid` in the dashboard. Kong stops accepting JWTs signed with the revoked `kid` within ~5 min (JWKS cache TTL). This is the only path that gives you **real revocation for already-issued JWTs** — API-key mint tokens live until their `exp`.
+
+### Server-side only
+
+Local signing is **server-side only**. The SDK throws `BehestConfigError` if you try to construct it in a browser (`typeof window !== "undefined"`). Browsers must use the API-key mint flow from a backend (see `@behest/react`) or call pre-minted tokens directly with plain `fetch`/OpenAI SDK.
 
 ## Browser safety
 

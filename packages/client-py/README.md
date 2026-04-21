@@ -113,7 +113,70 @@ Every error exposes `.status`, `.code`, `.trace_id` (matches `X-Trace-Id` respon
 
 ## Local-signing mode
 
-Prefix `BEHEST_KEY` with `behest_pk_` (or set a base64-encoded PKCS#8 PEM) and add `BEHEST_KID` / `BEHEST_TENANT_ID` / `BEHEST_PROJECT_ID`. The SDK auto-detects the prefix; **no code change**. Zero HTTP round-trips for minting.
+Sign JWTs locally with an RSA private key scoped to your tenant — **zero HTTP round-trips per mint**. Ideal for high-QPS backends, FastAPI services, and any "no outbound secrets traffic" policy.
+
+### 1. Generate a signing key
+
+Dashboard → **Settings → Signing Keys → Generate**. You receive (shown only once):
+
+- A PKCS#8 PEM private key — keep server-side.
+- A `kid` (key id) — short string like `kid_7h4m2p`. Public by design.
+
+The public half is published at `https://<slug>.behest.app/.well-known/jwks.json`; Kong picks it up within minutes.
+
+### 2. Encode + set env vars
+
+```bash
+PEM_B64=$(base64 < ./tenant-private-key.pem | tr -d '\n')
+
+export BEHEST_KEY="behest_pk_${PEM_B64}"
+export BEHEST_BASE_URL="https://amber-fox-042.behest.app"
+export BEHEST_KID="kid_7h4m2p"
+export BEHEST_TENANT_ID="tnt_..."
+export BEHEST_PROJECT_ID="proj_..."
+```
+
+### 3. Use it — no code change
+
+```python
+from behest import Behest
+
+behest = Behest()  # SDK sees behest_pk_ prefix → sign mode
+
+# Identical API — no HTTP call; signs locally with PyJWT + cryptography.
+result = await behest.auth.mint(user_id="u_42")
+
+await behest.chat.completions.create(
+    messages=[{"role": "user", "content": "Hi!"}],
+    user_id="u_42",
+)
+```
+
+### Advanced: pass the key programmatically
+
+Fetch from a secrets manager at startup instead of env:
+
+```python
+import os
+from behest import Behest
+
+pem = fetch_from_vault("tenant-jwt-key")   # your secrets-manager call
+behest = Behest(
+    key=pem,                                # raw PEM; no prefix needed
+    base_url="https://amber-fox-042.behest.app",
+    kid="kid_7h4m2p",
+    tenant_id="tnt_...",
+    project_id="proj_...",
+)
+```
+
+### Rotation
+
+Deploy new `BEHEST_KID` + `BEHEST_KEY` → revoke the old `kid` in the dashboard. Kong drops the old key from its JWKS cache within ~5 min; all JWTs signed with the revoked `kid` stop working immediately. **Only local-signing mode gives you real revocation for already-issued JWTs.**
+
+### Server-side only
+
+Never put a private key in a browser, React Native app, or any untrusted client. The SDK doesn't enforce this in Python (unlike TypeScript, where `typeof window` is checkable) — it's your responsibility. Browsers must receive pre-minted JWTs from a backend instead.
 
 ## Full guides
 
