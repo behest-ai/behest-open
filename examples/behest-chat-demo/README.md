@@ -15,28 +15,42 @@ Perfect for learning how Behest works before building your own app!
 ## ✨ Features
 
 ✅ **Simple User Authentication** — In-memory store with 2 demo users
+
 ✅ **Behest Integration** — Backend mints JWTs and proxies chat requests
+
 ✅ **CORS Configuration** — Shows how to safely handle cross-origin requests
+
 ✅ **Production-Ready Code** — Includes error handling and logging
+
 ✅ **Well-Documented** — Detailed comments explaining each step
 
 ---
 
 ## 📋 Quick Start (3 minutes)
 
-### 1. Get Your API Key
+### 1. Get Your API Key and Base URL
 
-- Go to https://dashboard.behest.ai
-- Create a project and copy your API key
-- Format: `behest_sk_live_xxx`
+- Go to https://behest.ai/dashboard/projects
+- Click on your project
+- Click "View API Keys"
+- Copy your `BEHEST_API_KEY` (format: `behest_sk_live_xxx`)
+- Copy your `BEHEST_BASE_URL` (Project Domain, format: `https://your-project-name.behest.app`)
 
 ### 2. Configure Environment
 
 ```bash
 cp .env.example .env
 nano .env
-# Edit: BEHEST_API_KEY=behest_sk_live_xxx
+# Edit these two values:
+# BEHEST_API_KEY=behest_sk_live_xxx
+# BEHEST_BASE_URL=https://your-project-name.behest.app
 ```
+
+**Where to find your values:**
+- Go to https://behest.ai/dashboard/projects
+- Click on your project
+- Click "View API Keys"
+- You'll see both `BEHEST_API_KEY` and `BEHEST_BASE_URL` (Project Domain)
 
 **Note:** `dotenv` loads `.env` by default (not `.env.local`)
 See **`ENV_SETUP.md`** for detailed configuration options.
