@@ -207,7 +207,7 @@ app.post("/api/get-token", requireAuth, async (req, res) => {
       },
       body: JSON.stringify({
         user_id: req.session.user.id,
-        role: "regular",
+        role: "user",
       }),
     });
 
