@@ -6,11 +6,13 @@ This guide explains how to configure the Behest Chat Demo for different environm
 
 ```bash
 # 1. Copy template
-cp .env.example .env.local
+cp .env.example .env
 
-# 2. Edit file and set your API key
-nano .env.local
-# Update: BEHEST_API_KEY=your-key-here
+# 2. Edit file and set your credentials
+nano .env
+# Update both:
+# BEHEST_API_KEY=your-key-here
+# BEHEST_BASE_URL=your-project-domain
 
 # 3. Install dependencies
 npm install
@@ -25,12 +27,12 @@ open http://localhost:3080
 
 ## Environment Files
 
-### `.env.local` — Local Development
+### `.env` or `.env.local` — Local Development
 **Used when:** Running `npm start` on your machine
 
 ```env
 BEHEST_API_KEY=behest_sk_live_xxx         # Your real API key
-BEHEST_BASE_URL=https://pearl-mint-781.behest.app
+BEHEST_BASE_URL=https://your-project-name.behest.app
 PORT=3080
 NODE_ENV=development
 SESSION_SECRET=local-dev-secret-xxx
@@ -40,7 +42,7 @@ LOG_LEVEL=debug
 
 ✅ **DO:**
 - Set your real Behest API key here
-- Use development Behest instance
+- Set your Behest project domain (base URL)
 - Add to `.gitignore` (local only, never commit)
 
 ❌ **DON'T:**
@@ -138,32 +140,32 @@ gcloud run deploy behest-chat-demo \
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `BEHEST_API_KEY` | ✅ Yes | Your private API key | `behest_sk_live_xxx` |
-| `BEHEST_BASE_URL` | ✅ Yes | Behest API endpoint | `https://pearl-mint-781.behest.app` |
-| `BEHEST_CHAT_URL` | ⚠️ Optional | Chat endpoint (same as BASE) | `https://pearl-mint-781.behest.app` |
+| `BEHEST_BASE_URL` | ✅ Yes | Behest API endpoint | `https://your-project-name.behest.app` |
+| `BEHEST_CHAT_URL` | ⚠️ Optional | Chat endpoint (same as BASE) | `https://your-project-name.behest.app` |
 | `PORT` | ⚠️ Optional | Server port | `3080` |
 | `NODE_ENV` | ⚠️ Optional | Environment mode | `development`, `production` |
 | `SESSION_SECRET` | ✅ Yes | Cookie signing secret | `random-32-char-string` |
 | `CORS_ORIGIN` | ⚠️ Optional | Allowed CORS origins | `http://localhost:3080` |
 | `LOG_LEVEL` | ⚠️ Optional | Logging level | `debug`, `info`, `warn`, `error` |
 
-## Getting Your API Key
+## Getting Your API Key and Base URL
 
 1. **Go to Behest Dashboard:**
-   - Visit https://dashboard.behest.ai
+   - Visit https://behest.ai/dashboard/projects
    - Sign in with your account
 
-2. **Navigate to API Keys:**
-   - Select your tenant
-   - Select your project
-   - Go to "API Keys" section
+2. **Select Your Project:**
+   - Click on your project
+   - Click "View API Keys"
 
-3. **Copy the Key:**
-   - Click "Copy" or select the key
-   - Format: `behest_sk_live_xxx`
+3. **Copy Both Values:**
+   - `BEHEST_API_KEY` — Copy your API key (format: `behest_sk_live_xxx`)
+   - `BEHEST_BASE_URL` — Copy your Project Domain (format: `https://your-project-name.behest.app`)
 
 4. **Add to Environment:**
    ```bash
    BEHEST_API_KEY=behest_sk_live_xxx
+   BEHEST_BASE_URL=https://your-project-name.behest.app
    ```
 
 ## Testing Your Setup
